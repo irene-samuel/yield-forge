@@ -81,3 +81,62 @@
     (ok (var-set contract-owner new-owner))
   )
 )
+
+;; Adjust protocol yield parameters (governance only)
+(define-public (set-reward-rate (new-rate uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
+    (asserts! (< new-rate u1000) ERR_INVALID_REWARD_RATE) ;; Maximum 100% APY
+    (ok (var-set reward-rate new-rate))
+  )
+)
+
+;; Configure minimum liquidity commitment period
+(define-public (set-min-stake-period (new-period uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
+    (asserts! (> new-period u0) ERR_INVALID_PERIOD)
+    (ok (var-set min-stake-period new-period))
+  )
+)
+
+;; Capitalize reward treasury for sustainable yield distribution
+(define-public (add-to-reward-pool (amount uint))
+  (begin
+    (asserts! (> amount u0) ERR_ZERO_STAKE)
+    ;; Secure sBTC transfer to protocol treasury
+    (try! (contract-call? 'ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT.sbtc-token
+      transfer amount tx-sender (as-contract tx-sender) none
+    ))
+    ;; Update treasury balance
+    (var-set reward-pool (+ (var-get reward-pool) amount))
+    (ok true)
+  )
+)
+
+;; CORE YIELD GENERATION ENGINE
+
+;; Deploy capital for yield generation and liquidity mining
+(define-public (stake (amount uint))
+  (begin
+    (asserts! (> amount u0) ERR_ZERO_STAKE)
+    ;; Execute secure asset custody transfer
+    (try! (contract-call? 'ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT.sbtc-token
+      transfer amount tx-sender (as-contract tx-sender) none
+    ))
+    ;; Update or initialize participant position
+    (match (map-get? stakes { staker: tx-sender })
+      prev-stake (map-set stakes { staker: tx-sender } {
+        amount: (+ amount (get amount prev-stake)),
+        staked-at: stacks-block-height,
+      })
+      (map-set stakes { staker: tx-sender } {
+        amount: amount,
+        staked-at: stacks-block-height,
+      })
+    )
+    ;; Update protocol total value locked
+    (var-set total-staked (+ (var-get total-staked) amount))
+    (ok true)
+  )
+)
