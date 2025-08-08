@@ -185,3 +185,49 @@
     (ok true)
   )
 )
+
+;; Exit liquidity position with accumulated yield harvest
+(define-public (unstake (amount uint))
+  (let (
+      (stake-info (unwrap! (map-get? stakes { staker: tx-sender }) ERR_NO_STAKE_FOUND))
+      (staked-amount (get amount stake-info))
+      (staked-at (get staked-at stake-info))
+      (stake-duration (- stacks-block-height staked-at))
+    )
+    ;; Security and validation layer
+    (asserts! (> amount u0) ERR_ZERO_STAKE)
+    (asserts! (>= staked-amount amount) ERR_NO_STAKE_FOUND)
+    (asserts! (>= stake-duration (var-get min-stake-period))
+      ERR_TOO_EARLY_TO_UNSTAKE
+    )
+    ;; Process final yield harvest
+    (try! (claim-rewards))
+    ;; Update or close participant position
+    (if (> staked-amount amount)
+      (map-set stakes { staker: tx-sender } {
+        amount: (- staked-amount amount),
+        staked-at: stacks-block-height,
+      })
+      (map-delete stakes { staker: tx-sender })
+    )
+    ;; Update protocol TVL metrics
+    (var-set total-staked (- (var-get total-staked) amount))
+    ;; Execute capital withdrawal
+    (as-contract (try! (contract-call? 'ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT.sbtc-token
+      transfer amount (as-contract tx-sender) tx-sender none
+    )))
+    (ok true)
+  )
+)
+
+;; PROTOCOL ANALYTICS & REPORTING
+
+;; Retrieve participant position details
+(define-read-only (get-stake-info (staker principal))
+  (map-get? stakes { staker: staker })
+)
+
+;; Get participant lifetime reward distribution
+(define-read-only (get-rewards-claimed (staker principal))
+  (map-get? rewards-claimed { staker: staker })
+)
