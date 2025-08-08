@@ -231,3 +231,42 @@
 (define-read-only (get-rewards-claimed (staker principal))
   (map-get? rewards-claimed { staker: staker })
 )
+
+;; Current protocol yield rate configuration
+(define-read-only (get-reward-rate)
+  (var-get reward-rate)
+)
+
+;; Security lockup period requirements
+(define-read-only (get-min-stake-period)
+  (var-get min-stake-period)
+)
+
+;; Protocol treasury liquidity status
+(define-read-only (get-reward-pool)
+  (var-get reward-pool)
+)
+
+;; Total value locked across all participants
+(define-read-only (get-total-staked)
+  (var-get total-staked)
+)
+
+;; Real-time APY calculation for yield optimization
+(define-read-only (get-current-apy)
+  (let ((rate-basis (var-get reward-rate)))
+    ;; Convert basis points to annualized percentage
+    (* rate-basis u100)
+  )
+)
+
+;; Comprehensive protocol performance dashboard
+(define-read-only (get-protocol-stats)
+  {
+    total-staked: (var-get total-staked),
+    reward-pool: (var-get reward-pool),
+    current-apy: (get-current-apy),
+    min-stake-period: (var-get min-stake-period),
+    reward-rate: (var-get reward-rate),
+  }
+)
